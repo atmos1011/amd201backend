@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "5iU4FTxGb7k=",
+  "success": true,
+  "projectFilePath": "D:\\University\\AMD201\\ASPVUE1103\\ServerApi\\ServerApi\\ServerApi.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Legion\\.nuget\\packages\\microsoft.aspnetcore.openapi\\10.0.11\\microsoft.aspnetcore.openapi.10.0.11.nupkg.sha512",
+    "C:\\Users\\Legion\\.nuget\\packages\\microsoft.openapi\\2.7.5\\microsoft.openapi.2.7.5.nupkg.sha512"
+  ],
+  "logs": []
+}
