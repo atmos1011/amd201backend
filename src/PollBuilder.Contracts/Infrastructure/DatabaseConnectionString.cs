@@ -52,7 +52,10 @@ namespace PollBuilder.Contracts.Infrastructure
                 SslMode = SslMode.Require
             };
 
-            // Preserve anything the provider tacked on, e.g. channel_binding or a pooler endpoint id.
+            // Carry over the query parameters Npgsql understands, and drop the ones it does not.
+            // Neon's default URI ends with "?sslmode=require&channel_binding=require", and
+            // channel_binding is a libpq option with no Npgsql equivalent - assigning it throws.
+            // Pasting the connection string Neon shows you must not crash the service on startup.
             foreach (var pair in uri.Query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
             {
                 var parts = pair.Split('=', 2);
@@ -67,10 +70,17 @@ namespace PollBuilder.Contracts.Infrastructure
                 if (key.Equals("sslmode", StringComparison.OrdinalIgnoreCase))
                 {
                     builder.SslMode = Enum.Parse<SslMode>(setting, ignoreCase: true);
+                    continue;
                 }
-                else
+
+                try
                 {
                     builder[key] = setting;
+                }
+                catch (ArgumentException)
+                {
+                    // Not an Npgsql keyword. Ignoring it is safe: these are libpq-only hints, and a
+                    // connection that would genuinely fail without one fails loudly when it is opened.
                 }
             }
 
