@@ -9,14 +9,12 @@ obj/
 *.suo
 
 ## Local secrets & env
-*.env
-.env
-.env.*
-# ...but the template, which holds no real values, is committed.
-!.env.example
 appsettings.*.local.json
 
 ## Test output
 test-results/
 TestResults/
 *.trx
+
+## Local dev settings hold the real Neon password
+appsettings.Development.json

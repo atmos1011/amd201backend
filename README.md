@@ -1,15 +1,15 @@
 # Poll & Survey Builder — Backend
 
-Backend for the AMD201 45H Workshop assignment: a real-time poll builder where anyone can create a
+Backend for the AMD201 45H Workshop assignment. A poll builder where anyone can create a
 multiple-choice question, share a short link, collect votes, and watch the results update live
 without refreshing the page.
 
-The backend is **four ASP.NET Core services behind an Ocelot API gateway**, deployed to Render as
-four containers, backed by PostgreSQL on Neon. The Vue SPA is deployed separately on Vercel and
-talks only to the gateway.
+It is built as **three ASP.NET Core services**, following the microservices pattern from class:
+an Ocelot API gateway in front, and two Web API services behind it, both using PostgreSQL on Neon.
+The Vue SPA is deployed separately on Vercel and only ever calls the gateway.
 
-- **Live gateway:** _set after deploy — see [Deployment](#deployment)_
-- **Live frontend:** _set after deploy_
+- **Live gateway:** _fill in after deploying_
+- **Live frontend:** _fill in after deploying_
 - **Frontend repository:** https://github.com/atmos1011/vuetest
 
 ---
@@ -23,85 +23,77 @@ talks only to the gateway.
         +---------------------------+
         |     Vue SPA (Vercel)      |
         +-------------+-------------+
-                      |  HTTPS + WebSocket
+                      |  HTTP + WebSocket
                       v
         +---------------------------+
-        |   ApiGateway (Ocelot)     |   <- the only public entry point
+        |   ApiGateway (Ocelot)     |   <- the only address the SPA knows
         +----+-----------------+----+
              |                 |
-   /api/polls|                 | /api/polls/{code}/vote
-   /api/polls/{code}           | /api/polls/{code}/results
              v                 v
-    +----------------+  +----------------+       +----------------------+
-    |  PollService   |  | VotingService  |------>|   RealtimeService    |
-    | polls, options |  |     votes      |       | SignalR hub,  no DB  |
-    +--------+-------+  +--------+-------+       +-----------+----------+
-             |                   |                           |
-             v                   v                           | WebSocket push
-    +----------------+  +----------------+                   | (proxied by the gateway)
-    | Neon Postgres  |  | Neon Postgres  |                   v
-    | schema: polls  |  | schema: voting |            every browser watching
-    +----------------+  +----------------+            that poll's results page
+    +----------------+  +------------------------+
+    |  PollManage    |  |      VoteManage        |
+    |  Polls,        |  |  Votes + SignalR hub   |
+    |  PollOptions   |<-|  (asks PollManage      |
+    +--------+-------+  |   about the poll)      |
+             |          +-----------+------------+
+             |                      |
+             v                      v
+        +-------------------------------+
+        |   Neon PostgreSQL: pollbuilder |
+        +-------------------------------+
 ```
 
-| Service | Owns | Responsibility |
+| Project | What it owns | What it does |
 |---|---|---|
-| **ApiGateway** | nothing | Ocelot. Publishes the REST surface the brief specifies and proxies the SignalR WebSocket. One public origin, so the SPA has one URL and one CORS origin to trust. |
-| **PollService** | `polls` schema (`Polls`, `PollOptions`) | Create, read, replace (`PUT`), patch (`PATCH`), close, QR code. Owns the creator-token rule. |
-| **VotingService** | `voting` schema (`Votes`) | Cast a vote, tally results, CSV export. Owns the one-vote-per-respondent rule. |
-| **RealtimeService** | nothing | Hosts the SignalR hub and fans out pushes. No database, so it can be restarted freely. |
+| **ApiGateway** | nothing | Ocelot. Turns one public URL into calls to the two services, and passes the SignalR WebSocket through. |
+| **PollManage** | `Polls`, `PollOptions` | Create a poll, read it, edit it (`PUT`/`PATCH`), close it. |
+| **VoteManage** | `Votes` | Record a vote, work out the results, and push them live over SignalR. |
 
-### How the services talk to each other
+### How VoteManage talks to PollManage
 
-- **VotingService → PollService** — before recording a vote, VotingService fetches the poll
-  **through the gateway** (`GET /api/polls/{code}`) to check it exists, is open, and has that
-  option. This follows the pattern from the microservices lab: services address each other by the
-  one public URL rather than by hardcoded hostnames.
-- **VotingService → PollService (internal)** — after the first vote lands it posts to
-  `internal/polls/{code}/votes-recorded`, so the creator can no longer rewrite the question under
-  people who have already voted.
-- **VotingService → RealtimeService** and **PollService → RealtimeService** (internal) — new
-  tallies and close events become SignalR pushes.
+VoteManage has no `Polls` table, so before saving a vote it asks PollManage for the poll — through
+the gateway, exactly like `StudentService` does in the microservices lab:
 
-Internal calls go **direct**, not through the gateway, and carry a shared `X-Internal-Key` secret.
-The gateway deliberately publishes no `/internal/*` route, so those endpoints are unreachable from
-the internet.
+```csharp
+var requestPath = $"api/polls/{code}";           // path on the gateway
+var response = await _httpClient.GetAsync(requestPath);
+```
 
-### Design decisions worth explaining
+It checks the poll exists, that its status is `Open`, and that the chosen option is really on the
+poll. After the first vote it calls `api/polls/{code}/votes-recorded` so PollManage can set
+`HasVotes = true` and stop the creator editing the question underneath people who already voted.
+
+### Decisions worth explaining in the presentation
 
 | Decision | Why |
 |---|---|
-| Gateway paths are `/api/polls/...` even for voting | The brief specifies those exact REST endpoints. The gateway presents them while three services do the work behind it. |
-| Votes reference a poll by **code**, not a foreign key | The `Polls` table lives in another service's schema. A cross-service FK would weld the two databases together and defeat the split. |
-| One Neon instance, two schemas | Database-per-service in spirit, one free-tier instance in practice — an honest cost trade-off, stated rather than hidden. |
-| One-vote-per-respondent is a **unique index** | `(PollCode, VoterToken)`. Application-level "have you voted?" checks lose races; the database does not. |
-| Voter identity in `localStorage`, not a cookie | Vercel → Render is cross-site, so a cookie would need `SameSite=None; Secure` and would still be dropped by Safari and Brave. That would break the live demo. |
-| Creator token stored **hashed** | Returned once at creation, SHA-256 in the database. A leaked row cannot be used to close someone else's poll. |
-| Editing refused once voting starts | Rewriting an option would silently reassign existing votes to different text. |
-| Integration tests use SQLite, not EF InMemory | InMemory ignores unique indexes, so the duplicate-vote test would pass without the constraint ever being exercised. |
+| Votes store the poll **code**, not a foreign key | The `Polls` table belongs to PollManage. A foreign key across services would tie them together and undo the point of splitting them. |
+| One database for both services | Same as the lab, where all three services share one Neon database. Simple, and free. |
+| One vote per browser is a **unique index** on `(PollCode, VoterToken)` | The C# check runs first, but two fast clicks can both pass it. The database index is what actually stops the second vote. |
+| Voter token in `localStorage`, not a cookie | Vercel and Render are different sites, and browsers such as Safari block cross-site cookies. That would break the demo. |
+| The creator gets a token, and it is needed to edit or close | Otherwise any voter could close someone else's poll. |
+| Editing is blocked once voting starts | Changing an option after votes exist would move those votes onto different text. |
+| `StatusCode(403)` instead of `Forbid()` | `Forbid()` needs an authentication scheme configured, and this project has none, so it throws a 500. |
 
 ---
 
 ## Running it locally
 
-### Everything in Docker (recommended — matches production)
+Set the connection string first — see [Configuration](#configuration).
+
+In Visual Studio: right-click the solution → **Properties** → **Configure Startup Projects** →
+**Multiple startup projects**, and start **PollManage**, **VoteManage** and **ApiGateway**
+(the gateway last, same as the lab).
+
+From a terminal:
 
 ```bash
-docker compose up --build
+dotnet run --project PollManage      # http://localhost:5101
+dotnet run --project VoteManage      # http://localhost:5102
+dotnet run --project ApiGateway      # http://localhost:5000
 ```
 
-That starts PostgreSQL plus all four services. The gateway is on **http://localhost:5000**, and it
-is the only port the SPA should ever call.
-
-To run the same stack against the **real Neon database** instead of the local container, copy
-`.env.example` to `.env` and put your connection string in it:
-
-```bash
-cp .env.example .env      # then edit POSTGRES_CONNECTION
-docker compose up --build
-```
-
-Compose picks `.env` up automatically. `.env` is gitignored; `.env.example` is not.
+Then call the gateway — never the services directly:
 
 ```bash
 # create a poll
@@ -118,163 +110,147 @@ curl -X POST http://localhost:5000/api/polls/<code>/vote \
 curl http://localhost:5000/api/polls/<code>/results
 ```
 
-### From the IDE
-
-Start PostgreSQL, then run all four projects — `PollBuilder.slnx` has a launch profile for each:
-
-```bash
-docker compose up -d postgres
-dotnet run --project src/PollService      # http://localhost:5101
-dotnet run --project src/VotingService    # http://localhost:5102
-dotnet run --project src/RealtimeService  # http://localhost:5103
-dotnet run --project src/ApiGateway       # http://localhost:5000
-```
-
-Each service serves interactive API docs at `/docs` (Scalar) and a health check at `/health`.
+PollManage and VoteManage each have Swagger at `/swagger` for trying requests by hand.
 
 ### Tests
 
 ```bash
-dotnet test PollBuilder.slnx
+dotnet test
 ```
 
-Unit tests for the business rules, integration tests that boot each service over real HTTP against
-SQLite, and SignalR tests that connect a real hub client and assert the push arrives.
+Thirteen tests covering the repositories: saving and finding polls, locking a poll once it has
+votes, one vote per browser, and the vote counting behind the results chart.
 
-### Formatting and static analysis
+### Formatting
 
 ```bash
-dotnet format PollBuilder.slnx --verify-no-changes
+dotnet format --verify-no-changes
 ```
 
-This is exactly what CI runs. Roslyn analyzers are enabled in `Directory.Build.props` and run as
-part of every build.
+This is the check the CI pipeline runs. Run `dotnet format` with no arguments to fix problems.
 
-### Database migrations
+### Migrations
+
+The tables are created from EF Core migrations. In Visual Studio's Package Manager Console, with
+the right project selected:
+
+```
+add-migration addpoll
+update-database
+```
+
+Or from a terminal:
 
 ```bash
-dotnet ef migrations add <Name> --project src/PollService   --context PollDbContext   --output-dir Data/Migrations
-dotnet ef migrations add <Name> --project src/VotingService --context VotingDbContext --output-dir Data/Migrations
+dotnet ef migrations add addpoll --project PollManage
+dotnet ef migrations add addvote --project VoteManage
 ```
 
-Migrations are applied automatically at startup (`Service:ApplyMigrationsOnStartup`), because
-Render's Docker deploy has no separate release step.
-
-Each service keeps its migrations ledger **inside its own schema**
-(`polls.__EFMigrationsHistory`, `voting.__EFMigrationsHistory`) rather than in the default
-`public.__EFMigrationsHistory`. The two services share one Neon database to stay on the free tier,
-and a shared ledger would mean two independently deployable services writing to the same table —
-exactly the coupling that splitting the schemas is meant to prevent.
+The migrations are already committed, and both services run `Database.Migrate()` on startup, so
+the tables appear by themselves the first time the app runs against an empty database. Render has
+no separate step for running migrations, which is why it is done in `Program.cs`.
 
 ---
 
 ## Configuration
 
-Every setting is an environment variable in production. `__` is the separator for nested keys.
-
-| Variable | Services | Purpose |
+| Setting | Where | What it is |
 |---|---|---|
-| `ConnectionStrings__Postgres` | Poll, Voting | Neon connection string. A `postgresql://` URI is accepted and converted automatically. |
-| `Service__AllowedOrigins__0` | all | Browser origin allowed by CORS, e.g. the Vercel URL. `*.vercel.app` preview domains are matched automatically. |
-| `Service__ShareBaseUrl` | Poll | SPA origin used to build share links, e.g. `https://myapp.vercel.app`. |
-| `Service__ApplyMigrationsOnStartup` | Poll, Voting | `true` in production. |
-| `ServiceEndpoints__GatewayBaseUrl` | Voting | Gateway URL, used to look polls up. |
-| `ServiceEndpoints__PollServiceBaseUrl` | Voting | PollService URL, for the internal callback. |
-| `ServiceEndpoints__RealtimeBaseUrl` | Poll, Voting | RealtimeService URL, for pushes. |
-| `ServiceEndpoints__InternalApiKey` | all | Shared secret for internal endpoints. **Must be the same value on all four services.** |
-| `Downstream__PollService`, `Downstream__VotingService`, `Downstream__RealtimeService` | Gateway | Where the gateway routes each path. Overrides the placeholder hosts in `ocelot.json`. |
-| `PORT` | all | Injected by Render. Defaults to 8080. |
+| `ConnectionStrings:myContext` | PollManage, VoteManage | The Neon connection string. |
+| `ServiceEndpoints:ApiGatewayBaseUrl` | VoteManage | The gateway URL, so VoteManage can ask PollManage about a poll. |
+| `ShareBaseUrl` | PollManage | The Vue app's URL, used to build the share link. |
+
+For local work these live in `appsettings.Development.json`, which is **gitignored** because it
+holds the real Neon password.
+
+In production every one of them is an environment variable on Render instead, using `__` between
+the levels:
+
+```
+ConnectionStrings__myContext=Host=ep-....neon.tech;Port=5432;Database=pollbuilder;Username=...;Password=...;SSL Mode=Require
+ServiceEndpoints__ApiGatewayBaseUrl=https://pollbuilder-gateway.onrender.com
+ShareBaseUrl=https://your-app.vercel.app
+```
+
+> Get the connection string from the Neon dashboard: **Connection string** panel → format
+> **.NET** → keep **Pooled connection** ticked. Pick a Neon region near your Render region.
 
 ---
 
 ## Deployment
 
-The database is **Neon** (free tier, no expiry). The services run on **Render** as four Docker web
-services from this one repository; they differ only in Dockerfile path.
-
 ### 1. Neon
 
-Create a project, then on the dashboard open the **Connection string** panel, pick the **.NET**
-snippet format and keep **Pooled connection** ticked. Choose a region near your Render region —
-mismatched regions add noticeable latency to every query during a live demo.
+Create a project and a database called `pollbuilder`. Both services share it, the same way all
+three services in the lab share one database.
 
-Both formats are accepted: the `.NET` key/value string, and the `postgresql://` URI. The URI form is
-converted automatically, including dropping libpq-only parameters such as `channel_binding` that
-Npgsql does not understand.
+### 2. Render — three web services
 
-Both services use the same database and create their own schema on first run.
+For each: **New → Web Service**, point it at this repository, choose **Docker**, and set the
+**Root Directory** to the project folder so the Dockerfile inside it is used:
 
-### 2. Render — four web services
-
-For each: **New → Web Service**, point it at this repository, choose **Docker**, set the Dockerfile
-path:
-
-| Render service | Dockerfile path |
+| Render service | Root Directory |
 |---|---|
-| `pollbuilder-poll` | `src/PollService/Dockerfile` |
-| `pollbuilder-voting` | `src/VotingService/Dockerfile` |
-| `pollbuilder-realtime` | `src/RealtimeService/Dockerfile` |
-| `pollbuilder-gateway` | `src/ApiGateway/Dockerfile` |
+| `pollbuilder-pollmanage` | `PollManage` |
+| `pollbuilder-votemanage` | `VoteManage` |
+| `pollbuilder-gateway` | `ApiGateway` |
 
-Leave the Docker build context at the repository root — every image also compiles
-`PollBuilder.Contracts`.
+Add the environment variables above. Create the gateway last, once the other two URLs exist.
 
-Then set the environment variables from the table above. Create the gateway last, once you know the
-other three URLs.
+### 3. Point the gateway at the deployed services
 
-### 3. GitHub secrets
+`ApiGateway/ocelot.json` holds the routes for local development, with `localhost` addresses.
+`ApiGateway/ocelot.Production.json` is the same list with the Render addresses, and Render loads it
+automatically because it sets `ASPNETCORE_ENVIRONMENT=Production`.
 
-`DOCKER_USERNAME`, `DOCKER_PASSWORD`, and one deploy hook per service:
-`RENDER_DEPLOY_HOOK_GATEWAY`, `RENDER_DEPLOY_HOOK_POLL`, `RENDER_DEPLOY_HOOK_VOTING`,
-`RENDER_DEPLOY_HOOK_REALTIME`.
+**Edit `ocelot.Production.json` and replace the two host names with your own Render URLs**, then
+commit. That is the only file that needs to change after deploying.
 
-### 4. Frontend
+### 4. GitHub secrets
 
-Point the SPA at the gateway with a single environment variable in Vercel:
+`DOCKER_USERNAME`, `DOCKER_PASSWORD`, `RENDER_DEPLOY_HOOK_POLL`, `RENDER_DEPLOY_HOOK_VOTE`,
+`RENDER_DEPLOY_HOOK_GATEWAY`.
+
+### 5. Frontend
+
+One environment variable in Vercel:
 
 ```
 VITE_API_BASE_URL=https://pollbuilder-gateway.onrender.com
 ```
 
-SignalR connects to `${VITE_API_BASE_URL}/hubs/poll`, which the gateway proxies to RealtimeService.
-If Render's free tier ever misbehaves on the WebSocket upgrade, set `VITE_REALTIME_URL` to the
-RealtimeService URL to bypass the gateway for the socket only.
-
 ### Before the demo
 
-Render's free tier spins a service down after 15 minutes idle and takes roughly 50 seconds to wake.
-**Open all four `/health` URLs a couple of minutes before presenting.**
+Render's free tier puts a service to sleep after 15 minutes and takes about 50 seconds to wake it
+up. **Open all three services in a browser a couple of minutes before presenting.**
 
 ---
 
 ## CI/CD
 
-| Workflow | Trigger | What it does |
+| Workflow | Runs on | What it does |
 |---|---|---|
-| `.github/workflows/ci.yml` | PR into `develop`, pushes to `develop`/`feature` | `dotnet format --verify-no-changes` (lint / static analysis) → build → unit + integration tests → builds all four Docker images without pushing. Never deploys. |
-| `.github/workflows/cd.yml` | push to `main` | Builds and pushes four images to Docker Hub tagged with the commit SHA and `latest`, then triggers the four Render deploy hooks. |
+| `.github/workflows/ci.yml` | pull request into `develop`, pushes to `develop` and `feature` | `dotnet format --verify-no-changes` (the linting step), then build, then test. It never deploys. |
+| `.github/workflows/cd.yml` | push to `main` | Builds a Docker image for each of the three projects, pushes them to Docker Hub, and calls each Render deploy hook. |
 
-Branching follows the workflow taught in class: `feature` → `develop` → `main`.
+Branches follow the order taught in class: `feature` → `develop` → `main`.
 
 ---
 
-## Repository layout
+## Project layout
 
 ```
-├── src/
-│   ├── ApiGateway/             Ocelot gateway; ocelot.json holds the public route table
-│   ├── PollBuilder.Contracts/  DTOs, errors and startup helpers shared by all services
-│   ├── PollService/            Polls and options
-│   ├── VotingService/          Votes and results
-│   └── RealtimeService/        SignalR hub
-├── tests/
-│   ├── PollService.Tests/      unit + integration
-│   ├── VotingService.Tests/    unit + integration
-│   └── RealtimeService.Tests/  SignalR end-to-end
-├── docs/API_CONTRACT.md        the contract the SPA is built against
-├── docker-compose.yml          the whole stack locally
-└── Directory.Build.props       shared build settings and analyzer configuration
+PollBuilder.slnx
+ApiGateway/            Ocelot gateway
+  ocelot.json              routes for local development
+  ocelot.Production.json   the same routes, pointing at Render
+PollManage/            polls and options
+  Models/  Data/  Repo/  Controllers/  Migrations/
+VoteManage/            votes, results and the SignalR hub
+  Models/  Data/  Repo/  Services/  Hubs/  Controllers/  Migrations/
+PollBuilder.Tests/     unit tests for both repositories
+docs/API_CONTRACT.md   what the frontend needs to know
 ```
 
-Within each service the layout follows the convention from the microservices lab:
-`Models/` → `Data/` → `Repo/` (`IXRepo` + `XRepo`) → `Services/` → `Controllers/`.
+Each service follows the same layout as the microservices lab: `Models` → `Data/myContext.cs` →
+`Repo` (`IXRepo` and `XRepo`) → `Services` for calling another service → `Controllers`.

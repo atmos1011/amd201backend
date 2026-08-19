@@ -1,0 +1,88 @@
+{
+  "Routes": [
+    // Poll routes -> PollManage
+    {
+      "UpstreamPathTemplate": "/api/polls",
+      "UpstreamHttpMethod": [ "POST" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/poll",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "localhost", "Port": 5101 } ]
+    },
+    {
+      "UpstreamPathTemplate": "/api/polls/{code}/close",
+      "UpstreamHttpMethod": [ "POST" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/poll/{code}/close",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "localhost", "Port": 5101 } ]
+    },
+    {
+      // VoteManage calls this one after the first vote is saved
+      "UpstreamPathTemplate": "/api/polls/{code}/votes-recorded",
+      "UpstreamHttpMethod": [ "POST" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/poll/{code}/votes-recorded",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "localhost", "Port": 5101 } ]
+    },
+
+    // Vote routes -> VoteManage
+    {
+      "UpstreamPathTemplate": "/api/polls/{code}/vote",
+      "UpstreamHttpMethod": [ "POST" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/vote/{code}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "localhost", "Port": 5102 } ]
+    },
+    {
+      "UpstreamPathTemplate": "/api/polls/{code}/vote/me",
+      "UpstreamHttpMethod": [ "GET" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/vote/{code}/me",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "localhost", "Port": 5102 } ]
+    },
+    {
+      "UpstreamPathTemplate": "/api/polls/{code}/results",
+      "UpstreamHttpMethod": [ "GET" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/vote/{code}/results",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "localhost", "Port": 5102 } ]
+    },
+
+    // SignalR -> VoteManage. The handshake is a normal POST, then it upgrades to a WebSocket.
+    {
+      "UpstreamPathTemplate": "/hubs/poll/negotiate",
+      "UpstreamHttpMethod": [ "POST", "OPTIONS" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/hubs/poll/negotiate",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "localhost", "Port": 5102 } ]
+    },
+    {
+      "UpstreamPathTemplate": "/hubs/poll",
+      "Priority": 10,
+      "DownstreamPathTemplate": "/hubs/poll",
+      "DownstreamScheme": "ws",
+      "DownstreamHostAndPorts": [ { "Host": "localhost", "Port": 5102 } ]
+    },
+
+    // This one is last on purpose. Its {code} at the end will match anything, including
+    // "abc123/results", so every longer path above must be checked first. That is what
+    // Priority does: bigger number is checked first.
+    {
+      "UpstreamPathTemplate": "/api/polls/{code}",
+      "UpstreamHttpMethod": [ "GET", "PUT", "PATCH" ],
+      "Priority": 1,
+      "DownstreamPathTemplate": "/api/poll/{code}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "localhost", "Port": 5101 } ]
+    }
+  ],
+  "GlobalConfiguration": {
+    "BaseUrl": "http://localhost:5000"
+  }
+}
