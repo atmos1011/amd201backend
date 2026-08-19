@@ -1,0 +1,97 @@
+{
+  "_comment": "Public API surface. The paths here are the ones the assignment brief specifies; behind them the work is split across three services. Priority matters: a trailing {code} placeholder matches greedily in Ocelot, so /api/polls/{code} must be evaluated after every longer path that starts the same way.",
+  "Routes": [
+    {
+      "_comment": "Create a poll",
+      "UpstreamPathTemplate": "/api/polls",
+      "UpstreamHttpMethod": [ "POST" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/polls",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "poll-service", "Port": 8080 } ]
+    },
+    {
+      "_comment": "Close a poll (shortcut for PATCH status=Closed)",
+      "UpstreamPathTemplate": "/api/polls/{code}/close",
+      "UpstreamHttpMethod": [ "POST" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/polls/{code}/close",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "poll-service", "Port": 8080 } ]
+    },
+    {
+      "_comment": "QR code for the share link",
+      "UpstreamPathTemplate": "/api/polls/{code}/qr",
+      "UpstreamHttpMethod": [ "GET" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/polls/{code}/qr",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "poll-service", "Port": 8080 } ]
+    },
+    {
+      "_comment": "Cast a vote - published on the poll path the brief specifies, served by VotingService",
+      "UpstreamPathTemplate": "/api/polls/{code}/vote",
+      "UpstreamHttpMethod": [ "POST" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/votes/{code}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "voting-service", "Port": 8080 } ]
+    },
+    {
+      "_comment": "Has this browser already voted?",
+      "UpstreamPathTemplate": "/api/polls/{code}/vote/me",
+      "UpstreamHttpMethod": [ "GET" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/votes/{code}/me",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "voting-service", "Port": 8080 } ]
+    },
+    {
+      "_comment": "Results as CSV - declared before /results so the longer path wins",
+      "UpstreamPathTemplate": "/api/polls/{code}/results.csv",
+      "UpstreamHttpMethod": [ "GET" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/votes/{code}/results.csv",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "voting-service", "Port": 8080 } ]
+    },
+    {
+      "_comment": "Live results",
+      "UpstreamPathTemplate": "/api/polls/{code}/results",
+      "UpstreamHttpMethod": [ "GET" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/votes/{code}/results",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "voting-service", "Port": 8080 } ]
+    },
+    {
+      "_comment": "SignalR negotiate handshake (plain HTTP POST)",
+      "UpstreamPathTemplate": "/hubs/poll/negotiate",
+      "UpstreamHttpMethod": [ "POST", "OPTIONS" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/hubs/poll/negotiate",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "realtime-service", "Port": 8080 } ]
+    },
+    {
+      "_comment": "SignalR WebSocket upgrade",
+      "UpstreamPathTemplate": "/hubs/poll",
+      "Priority": 10,
+      "DownstreamPathTemplate": "/hubs/poll",
+      "DownstreamScheme": "ws",
+      "DownstreamHostAndPorts": [ { "Host": "realtime-service", "Port": 8080 } ]
+    },
+    {
+      "_comment": "Read, replace or patch a poll. Lowest priority: its trailing placeholder would otherwise swallow every path above.",
+      "UpstreamPathTemplate": "/api/polls/{code}",
+      "UpstreamHttpMethod": [ "GET", "PUT", "PATCH" ],
+      "Priority": 1,
+      "DownstreamPathTemplate": "/api/polls/{code}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "poll-service", "Port": 8080 } ]
+    }
+  ],
+  "GlobalConfiguration": {
+    "_comment": "Rate limiting is applied by VotingService on the vote endpoint itself, where the per-IP partition and the business rule live together, rather than by Ocelot here."
+  }
+}

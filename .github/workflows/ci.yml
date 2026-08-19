@@ -1,3 +1,5 @@
+# Continuous integration: runs on every pull request into develop, and on pushes to develop or a
+# feature branch. It never deploys anything - deployment is cd.yml's job, on main only.
 name: Backend CI Pipeline (Feature to Develop PR)
 
 on:
@@ -5,10 +7,17 @@ on:
     branches:
       - develop
     types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - develop
+      - feature
+  workflow_dispatch:
 
 jobs:
   ci:
+    name: Lint, build and test
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -19,31 +28,56 @@ jobs:
           dotnet-version: '10.0.x'
 
       - name: Restore dependencies
-        run: dotnet restore
+        run: dotnet restore PollBuilder.slnx
+
+      # Static analysis step. `dotnet format` enforces .editorconfig, and the Roslyn analyzers
+      # enabled in Directory.Build.props run as part of the build below.
+      - name: Verify formatting and code style
+        run: dotnet format PollBuilder.slnx --verify-no-changes --no-restore
 
       - name: Build
-        run: dotnet build --no-restore --configuration Release
+        run: dotnet build PollBuilder.slnx --no-restore --configuration Release
 
+      # Unit tests and integration tests both run here. The integration tests boot each service
+      # with WebApplicationFactory against SQLite, so no database service is needed.
       - name: Test
-        run: dotnet test --no-build --configuration Release
+        run: >
+          dotnet test PollBuilder.slnx
+          --no-build
+          --configuration Release
+          --logger "trx;LogFileName=test-results.trx"
+          --results-directory ./test-results
 
-  deploy_pr_build:
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: ./test-results
+          retention-days: 7
+
+  docker:
+    name: Verify Docker images build
     runs-on: ubuntu-latest
     needs: ci
-    steps:
-      - name: Trigger Render Deploy Hook
-        run: curl -X GET ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
-        env:
-          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
 
-      - name: Comment on PR with Backend Deployment Status
-        uses: actions/github-script@v7
+    strategy:
+      matrix:
+        service: [ApiGateway, PollService, VotingService, RealtimeService]
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Build only - a pull request must never publish an image or touch production.
+      - name: Build ${{ matrix.service }} image
+        uses: docker/build-push-action@v6
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: "⚙️ Backend deployment triggered on Render for this PR branch."
-            });
+          context: .
+          file: src/${{ matrix.service }}/Dockerfile
+          push: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

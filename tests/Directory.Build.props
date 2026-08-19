@@ -1,0 +1,12 @@
+<Project>
+
+  <!-- Inherit the solution-wide settings, then relax the rules that only make sense for shipped code. -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <!-- CA1707: underscores make test names readable as sentences, which is the point of them. -->
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+
+</Project>
