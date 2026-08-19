@@ -32,7 +32,7 @@ services:
       dockerfile: src/PollService/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=pollbuilder;Username=postgres;Password=postgres"
+      ConnectionStrings__Postgres: "${POSTGRES_CONNECTION:-Host=postgres;Port=5432;Database=pollbuilder;Username=postgres;Password=postgres}"
       Service__ApplyMigrationsOnStartup: "true"
       Service__ShareBaseUrl: "http://localhost:5173"
       Service__AllowedOrigins__0: "http://localhost:5173"
@@ -52,7 +52,7 @@ services:
       dockerfile: src/VotingService/Dockerfile
     environment:
       ASPNETCORE_ENVIRONMENT: Production
-      ConnectionStrings__Postgres: "Host=postgres;Port=5432;Database=pollbuilder;Username=postgres;Password=postgres"
+      ConnectionStrings__Postgres: "${POSTGRES_CONNECTION:-Host=postgres;Port=5432;Database=pollbuilder;Username=postgres;Password=postgres}"
       Service__ApplyMigrationsOnStartup: "true"
       Service__AllowedOrigins__0: "http://localhost:5173"
       Service__AllowedOrigins__1: "http://localhost:4173"

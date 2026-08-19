@@ -93,6 +93,16 @@ docker compose up --build
 That starts PostgreSQL plus all four services. The gateway is on **http://localhost:5000**, and it
 is the only port the SPA should ever call.
 
+To run the same stack against the **real Neon database** instead of the local container, copy
+`.env.example` to `.env` and put your connection string in it:
+
+```bash
+cp .env.example .env      # then edit POSTGRES_CONNECTION
+docker compose up --build
+```
+
+Compose picks `.env` up automatically. `.env` is gitignored; `.env.example` is not.
+
 ```bash
 # create a poll
 curl -X POST http://localhost:5000/api/polls \
@@ -150,6 +160,12 @@ dotnet ef migrations add <Name> --project src/VotingService --context VotingDbCo
 Migrations are applied automatically at startup (`Service:ApplyMigrationsOnStartup`), because
 Render's Docker deploy has no separate release step.
 
+Each service keeps its migrations ledger **inside its own schema**
+(`polls.__EFMigrationsHistory`, `voting.__EFMigrationsHistory`) rather than in the default
+`public.__EFMigrationsHistory`. The two services share one Neon database to stay on the free tier,
+and a shared ledger would mean two independently deployable services writing to the same table —
+exactly the coupling that splitting the schemas is meant to prevent.
+
 ---
 
 ## Configuration
@@ -178,8 +194,15 @@ services from this one repository; they differ only in Dockerfile path.
 
 ### 1. Neon
 
-Create a project and copy the pooled connection string. Both services use the same database and
-create their own schema on first run.
+Create a project, then on the dashboard open the **Connection string** panel, pick the **.NET**
+snippet format and keep **Pooled connection** ticked. Choose a region near your Render region —
+mismatched regions add noticeable latency to every query during a live demo.
+
+Both formats are accepted: the `.NET` key/value string, and the `postgresql://` URI. The URI form is
+converted automatically, including dropping libpq-only parameters such as `channel_binding` that
+Npgsql does not understand.
+
+Both services use the same database and create their own schema on first run.
 
 ### 2. Render — four web services
 

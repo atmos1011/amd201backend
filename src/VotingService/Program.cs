@@ -1,9 +1,9 @@
 using System.Threading.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.Options;
 using PollBuilder.Contracts.Infrastructure;
 using PollBuilder.Voting.Data;
-using PollBuilder.Voting.Repo;
 using PollBuilder.Voting.Repo;
 using PollBuilder.Voting.Services;
 using Scalar.AspNetCore;
@@ -20,7 +20,11 @@ var connectionString = DatabaseConnectionString.Resolve(builder.Configuration)
         "No PostgreSQL connection string. Set ConnectionStrings__Postgres (or DATABASE_URL) in the " +
         "environment. See README.md for the Neon setup steps.");
 
-builder.Services.AddDbContext<VotingDbContext>(options => options.UseNpgsql(connectionString));
+builder.Services.AddDbContext<VotingDbContext>(options =>
+    // See the matching comment in PollService: each service keeps its own migrations ledger inside
+    // the schema it owns, so the two never write to the same table.
+    options.UseNpgsql(connectionString, npgsql =>
+        npgsql.MigrationsHistoryTable(HistoryRepository.DefaultTableName, VotingDbContext.Schema)));
 builder.Services.AddHealthChecks().AddDbContextCheck<VotingDbContext>("database");
 
 builder.Services.AddScoped<IVoteRepo, VoteRepo>();

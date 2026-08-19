@@ -10,6 +10,10 @@ obj/
 
 ## Local secrets & env
 *.env
+.env
+.env.*
+# ...but the template, which holds no real values, is committed.
+!.env.example
 appsettings.*.local.json
 
 ## Test output

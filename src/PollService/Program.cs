@@ -1,7 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Migrations;
 using PollBuilder.Contracts.Infrastructure;
 using PollBuilder.Polls.Data;
-using PollBuilder.Polls.Repo;
 using PollBuilder.Polls.Repo;
 using PollBuilder.Polls.Services;
 using Scalar.AspNetCore;
@@ -18,7 +18,13 @@ var connectionString = DatabaseConnectionString.Resolve(builder.Configuration)
         "No PostgreSQL connection string. Set ConnectionStrings__Postgres (or DATABASE_URL) in the " +
         "environment. See README.md for the Neon setup steps.");
 
-builder.Services.AddDbContext<PollDbContext>(options => options.UseNpgsql(connectionString));
+builder.Services.AddDbContext<PollDbContext>(options =>
+    // Keep the migrations ledger inside this service's own schema. Both services share one Neon
+    // database to stay on the free tier, and a shared public.__EFMigrationsHistory would mean two
+    // independently deployable services writing to one table - exactly the coupling the schema
+    // split exists to avoid.
+    options.UseNpgsql(connectionString, npgsql =>
+        npgsql.MigrationsHistoryTable(HistoryRepository.DefaultTableName, PollDbContext.Schema)));
 builder.Services.AddHealthChecks().AddDbContextCheck<PollDbContext>("database");
 
 builder.Services.AddScoped<IPollRepo, PollRepo>();
