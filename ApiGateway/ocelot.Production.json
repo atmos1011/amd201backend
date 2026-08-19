@@ -1,0 +1,81 @@
+{
+  // Same routes as ocelot.json, but pointing at the deployed services instead of localhost.
+  // Program.cs loads this file on top of ocelot.json when ASPNETCORE_ENVIRONMENT is Production,
+  // which is what Render sets.
+  //
+  // AFTER DEPLOYING: replace the two host names below with your own Render URLs
+  // (the host only, with no https:// in front).
+  "Routes": [
+    {
+      "UpstreamPathTemplate": "/api/polls",
+      "UpstreamHttpMethod": [ "POST" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/poll",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [ { "Host": "pollbuilder-pollmanage.onrender.com", "Port": 443 } ]
+    },
+    {
+      "UpstreamPathTemplate": "/api/polls/{code}/close",
+      "UpstreamHttpMethod": [ "POST" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/poll/{code}/close",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [ { "Host": "pollbuilder-pollmanage.onrender.com", "Port": 443 } ]
+    },
+    {
+      "UpstreamPathTemplate": "/api/polls/{code}/votes-recorded",
+      "UpstreamHttpMethod": [ "POST" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/poll/{code}/votes-recorded",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [ { "Host": "pollbuilder-pollmanage.onrender.com", "Port": 443 } ]
+    },
+    {
+      "UpstreamPathTemplate": "/api/polls/{code}/vote",
+      "UpstreamHttpMethod": [ "POST" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/vote/{code}",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [ { "Host": "pollbuilder-votemanage.onrender.com", "Port": 443 } ]
+    },
+    {
+      "UpstreamPathTemplate": "/api/polls/{code}/vote/me",
+      "UpstreamHttpMethod": [ "GET" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/vote/{code}/me",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [ { "Host": "pollbuilder-votemanage.onrender.com", "Port": 443 } ]
+    },
+    {
+      "UpstreamPathTemplate": "/api/polls/{code}/results",
+      "UpstreamHttpMethod": [ "GET" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/vote/{code}/results",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [ { "Host": "pollbuilder-votemanage.onrender.com", "Port": 443 } ]
+    },
+    {
+      "UpstreamPathTemplate": "/hubs/poll/negotiate",
+      "UpstreamHttpMethod": [ "POST", "OPTIONS" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/hubs/poll/negotiate",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [ { "Host": "pollbuilder-votemanage.onrender.com", "Port": 443 } ]
+    },
+    {
+      "UpstreamPathTemplate": "/hubs/poll",
+      "Priority": 10,
+      "DownstreamPathTemplate": "/hubs/poll",
+      "DownstreamScheme": "wss",
+      "DownstreamHostAndPorts": [ { "Host": "pollbuilder-votemanage.onrender.com", "Port": 443 } ]
+    },
+    {
+      "UpstreamPathTemplate": "/api/polls/{code}",
+      "UpstreamHttpMethod": [ "GET", "PUT", "PATCH" ],
+      "Priority": 1,
+      "DownstreamPathTemplate": "/api/poll/{code}",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [ { "Host": "pollbuilder-pollmanage.onrender.com", "Port": 443 } ]
+    }
+  ]
+}
