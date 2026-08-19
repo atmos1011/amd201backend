@@ -11,3 +11,8 @@ obj/
 ## Local secrets & env
 *.env
 appsettings.*.local.json
+
+## Test output
+test-results/
+TestResults/
+*.trx

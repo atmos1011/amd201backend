@@ -1,0 +1,14 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ApiGateway/ApiGateway.csproj" />
+    <Project Path="src/PollBuilder.Contracts/PollBuilder.Contracts.csproj" />
+    <Project Path="src/PollService/PollService.csproj" />
+    <Project Path="src/RealtimeService/RealtimeService.csproj" />
+    <Project Path="src/VotingService/VotingService.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PollService.Tests/PollService.Tests.csproj" />
+    <Project Path="tests/RealtimeService.Tests/RealtimeService.Tests.csproj" />
+    <Project Path="tests/VotingService.Tests/VotingService.Tests.csproj" />
+  </Folder>
+</Solution>

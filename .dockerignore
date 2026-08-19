@@ -1,6 +1,13 @@
-bin/
-obj/
+# Everything the image never needs. Keeping the build context small also keeps
+# `docker build` fast on GitHub Actions runners.
+**/bin/
+**/obj/
+**/.vs/
+**/*.user
 .git/
 .github/
-.vs/
-*.user
+docs/
+tests/
+**/node_modules/
+*.md
+docker-compose*.yml
