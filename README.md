@@ -4,8 +4,8 @@ Backend for the AMD201 45H Workshop assignment. A poll builder where anyone can 
 multiple-choice question, share a short link, collect votes, and watch the results update live
 without refreshing the page.
 
-It is built as **three ASP.NET Core services**, following the microservices pattern from class:
-an Ocelot API gateway in front, and two Web API services behind it, both using PostgreSQL on Neon.
+It is built as **an Ocelot API gateway plus three ASP.NET Core services**, following the
+microservices pattern from class, with PostgreSQL on Neon.
 The Vue SPA is deployed separately on Vercel and only ever calls the gateway.
 
 - **Live gateway:** _fill in after deploying_
@@ -27,29 +27,32 @@ The Vue SPA is deployed separately on Vercel and only ever calls the gateway.
                       v
         +---------------------------+
         |   ApiGateway (Ocelot)     |   <- the only address the SPA knows
-        +----+-----------------+----+
-             |                 |
-             v                 v
-    +----------------+  +------------------------+
-    |  PollManage    |  |      VoteManage        |
-    |  Polls,        |  |  Votes + SignalR hub   |
-    |  PollOptions   |<-|  (asks PollManage      |
-    +--------+-------+  |   about the poll)      |
-             |          +-----------+------------+
-             |                      |
-             v                      v
-        +-------------------------------+
-        |   Neon PostgreSQL: pollbuilder |
-        +-------------------------------+
+        +----+---------+--------+---+
+             |         |        |
+             v         v        v
+    +-------------+ +---------+ +----------------------+
+    | PollManage  | |VoteManage| |    ResultManage     |
+    |    (A)      | |   (B)    | |         (C)         |
+    | Polls,      | | Votes    | | no database of its  |
+    | PollOptions | |          | | own + SignalR hub   |
+    +------+------+ +----+-----+ +-----+----------+----+
+           |             |             |          |
+           |             |        asks A for   asks B for
+           |             |        option text  the counts
+           v             v             |          |
+        +---------------------------+  |          |
+        | Neon PostgreSQL: pollbuilder| <----------+
+        +---------------------------+
 ```
 
 | Project | What it owns | What it does |
 |---|---|---|
-| **ApiGateway** | nothing | Ocelot. Turns one public URL into calls to the two services, and passes the SignalR WebSocket through. |
-| **PollManage** | `Polls`, `PollOptions` | Create a poll, read it, edit it (`PUT`/`PATCH`), close it. |
-| **VoteManage** | `Votes` | Record a vote, work out the results, and push them live over SignalR. |
+| **ApiGateway** | nothing | Ocelot. Turns one public URL into calls to the three services, and passes the SignalR WebSocket through. |
+| **PollManage** (A) | `Polls`, `PollOptions` | Create a poll, read it, edit it (`PUT`/`PATCH`), close it. |
+| **VoteManage** (B) | `Votes` | Record a vote, one per browser, and report the raw counts. |
+| **ResultManage** (C) | nothing | Asks A for the option text and B for the counts, joins them into the results, and pushes them live over SignalR. |
 
-### How VoteManage talks to PollManage
+### How the services talk to each other
 
 VoteManage has no `Polls` table, so before saving a vote it asks PollManage for the poll — through
 the gateway, exactly like `StudentService` does in the microservices lab:
@@ -63,10 +66,20 @@ It checks the poll exists, that its status is `Open`, and that the chosen option
 poll. After the first vote it calls `api/polls/{code}/votes-recorded` so PollManage can set
 `HasVotes = true` and stop the creator editing the question underneath people who already voted.
 
+**ResultManage is service C in the `/ref` guide "sử dụng service A và Service B phục vụ cho service
+C".** It owns no tables at all. To build the results it asks PollManage for the question and option
+text, and VoteManage for the vote counts, then joins the two. This is the same shape as
+`EnrollmentService` in the lab, which uses `StudentService` and `TeacherService`.
+
+After saving a vote, VoteManage calls `api/polls/{code}/results/broadcast`, so ResultManage rebuilds
+the results and pushes them to every browser watching that poll. Every one of these calls goes
+through the gateway.
+
 ### Decisions worth explaining in the presentation
 
 | Decision | Why |
 |---|---|
+| ResultManage has no database | It is a joining service. Giving it tables would mean copying data that PollManage and VoteManage already own. |
 | Votes store the poll **code**, not a foreign key | The `Polls` table belongs to PollManage. A foreign key across services would tie them together and undo the point of splitting them. |
 | One database for both services | Same as the lab, where all three services share one Neon database. Simple, and free. |
 | One vote per browser is a **unique index** on `(PollCode, VoterToken)` | The C# check runs first, but two fast clicks can both pass it. The database index is what actually stops the second vote. |
@@ -83,13 +96,14 @@ Set the connection string first — see [Configuration](#configuration).
 
 In Visual Studio: right-click the solution → **Properties** → **Configure Startup Projects** →
 **Multiple startup projects**, and start **PollManage**, **VoteManage** and **ApiGateway**
-(the gateway last, same as the lab).
+(the gateway last, same as the lab). All four projects need to be running.
 
 From a terminal:
 
 ```bash
 dotnet run --project PollManage      # http://localhost:5101
 dotnet run --project VoteManage      # http://localhost:5102
+dotnet run --project ResultManage    # http://localhost:5103
 dotnet run --project ApiGateway      # http://localhost:5000
 ```
 
@@ -157,7 +171,7 @@ no separate step for running migrations, which is why it is done in `Program.cs`
 | Setting | Where | What it is |
 |---|---|---|
 | `ConnectionStrings:myContext` | PollManage, VoteManage | The Neon connection string. |
-| `ServiceEndpoints:ApiGatewayBaseUrl` | VoteManage | The gateway URL, so VoteManage can ask PollManage about a poll. |
+| `ServiceEndpoints:ApiGatewayBaseUrl` | VoteManage, ResultManage | The gateway URL, so a service can call the others through it. |
 | `ShareBaseUrl` | PollManage | The Vue app's URL, used to build the share link. |
 
 For local work these live in `appsettings.Development.json`, which is **gitignored** because it
@@ -193,6 +207,7 @@ For each: **New → Web Service**, point it at this repository, choose **Docker*
 |---|---|
 | `pollbuilder-pollmanage` | `PollManage` |
 | `pollbuilder-votemanage` | `VoteManage` |
+| `pollbuilder-resultmanage` | `ResultManage` |
 | `pollbuilder-gateway` | `ApiGateway` |
 
 Add the environment variables above. Create the gateway last, once the other two URLs exist.
@@ -209,7 +224,7 @@ commit. That is the only file that needs to change after deploying.
 ### 4. GitHub secrets
 
 `DOCKER_USERNAME`, `DOCKER_PASSWORD`, `RENDER_DEPLOY_HOOK_POLL`, `RENDER_DEPLOY_HOOK_VOTE`,
-`RENDER_DEPLOY_HOOK_GATEWAY`.
+`RENDER_DEPLOY_HOOK_RESULT`, `RENDER_DEPLOY_HOOK_GATEWAY`.
 
 ### 5. Frontend
 
@@ -222,7 +237,7 @@ VITE_API_BASE_URL=https://pollbuilder-gateway.onrender.com
 ### Before the demo
 
 Render's free tier puts a service to sleep after 15 minutes and takes about 50 seconds to wake it
-up. **Open all three services in a browser a couple of minutes before presenting.**
+up. **Open all four services in a browser a couple of minutes before presenting.**
 
 ---
 
@@ -231,7 +246,7 @@ up. **Open all three services in a browser a couple of minutes before presenting
 | Workflow | Runs on | What it does |
 |---|---|---|
 | `.github/workflows/ci.yml` | pull request into `develop`, pushes to `develop` and `feature` | `dotnet format --verify-no-changes` (the linting step), then build, then test. It never deploys. |
-| `.github/workflows/cd.yml` | push to `main` | Builds a Docker image for each of the three projects, pushes them to Docker Hub, and calls each Render deploy hook. |
+| `.github/workflows/cd.yml` | push to `main` | Builds a Docker image for each of the four projects, pushes them to Docker Hub, and calls each Render deploy hook. |
 
 Branches follow the order taught in class: `feature` → `develop` → `main`.
 
@@ -244,10 +259,12 @@ PollBuilder.slnx
 ApiGateway/            Ocelot gateway
   ocelot.json              routes for local development
   ocelot.Production.json   the same routes, pointing at Render
-PollManage/            polls and options
+PollManage/            (A) polls and options
   Models/  Data/  Repo/  Controllers/  Migrations/
-VoteManage/            votes, results and the SignalR hub
-  Models/  Data/  Repo/  Services/  Hubs/  Controllers/  Migrations/
+VoteManage/            (B) votes
+  Models/  Data/  Repo/  Services/  Controllers/  Migrations/
+ResultManage/          (C) joins A and B, and hosts the SignalR hub
+  Models/  Services/  Hubs/  Controllers/
 PollBuilder.Tests/     unit tests for both repositories
 docs/API_CONTRACT.md   what the frontend needs to know
 ```

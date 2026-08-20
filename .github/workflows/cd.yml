@@ -11,7 +11,8 @@ on:
 #
 # Secrets needed in the repo:
 #   DOCKER_USERNAME, DOCKER_PASSWORD
-#   RENDER_DEPLOY_HOOK_POLL, RENDER_DEPLOY_HOOK_VOTE, RENDER_DEPLOY_HOOK_GATEWAY
+#   RENDER_DEPLOY_HOOK_POLL, RENDER_DEPLOY_HOOK_VOTE,
+#   RENDER_DEPLOY_HOOK_RESULT, RENDER_DEPLOY_HOOK_GATEWAY
 jobs:
   build_and_push_docker:
     runs-on: ubuntu-latest
@@ -28,6 +29,9 @@ jobs:
           - project: VoteManage
             image: votemanage
             hook: RENDER_DEPLOY_HOOK_VOTE
+          - project: ResultManage
+            image: resultmanage
+            hook: RENDER_DEPLOY_HOOK_RESULT
           - project: ApiGateway
             image: apigateway
             hook: RENDER_DEPLOY_HOOK_GATEWAY

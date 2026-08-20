@@ -6,7 +6,7 @@ Everything the Vue app needs. **Only call the gateway.** One base URL:
 VITE_API_BASE_URL = https://<gateway>.onrender.com     # http://localhost:5000 locally
 ```
 
-There are two services behind the gateway, but the frontend never needs to know that.
+There are three services behind the gateway, but the frontend never needs to know that.
 
 ---
 
@@ -88,6 +88,9 @@ X-Voter-Token: <token>      not needed on the very first vote
 }
 ```
 
+`results` can be `null` in the rare case the results service could not be reached. The vote is still
+saved, so treat `null` as "fetch the results yourself" rather than as a failure.
+
 | Status | Meaning | What the UI should do |
 |---|---|---|
 | `400` | that option is not on the poll | refresh the poll |
@@ -134,6 +137,12 @@ X-Voter-Token: <token>
 
 Useful when someone opens a poll link directly and you need to decide whether to show the form or
 the results.
+
+---
+
+### `GET /api/polls/{code}/results.csv` — download the results
+
+Returns a CSV file, for opening in Excel. Handy for the demo.
 
 ---
 

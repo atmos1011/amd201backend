@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using VoteManage.Data;
-using VoteManage.Hubs;
 using VoteManage.Repo;
 using VoteManage.Services;
 
@@ -25,7 +24,8 @@ builder.Services.AddDbContext<myContext>(options => options.UseNpgsql(connection
 builder.Services.AddScoped<IVoteRepo, VoteRepo>();
 
 // -----------------------------------------------------------
-// This service asks PollManage about polls, and it goes through the gateway to do it.
+// This service asks PollManage about polls and ResultManage to publish results,
+// and it goes through the gateway to do both.
 var gatewayBaseUrl = builder.Configuration["ServiceEndpoints:ApiGatewayBaseUrl"];
 if (string.IsNullOrEmpty(gatewayBaseUrl))
 {
@@ -34,12 +34,11 @@ if (string.IsNullOrEmpty(gatewayBaseUrl))
 
 builder.Services.AddHttpClient<PollService>(client =>
     client.BaseAddress = new Uri(gatewayBaseUrl.EndsWith("/") ? gatewayBaseUrl : gatewayBaseUrl + "/"));
+builder.Services.AddHttpClient<ResultService>(client =>
+    client.BaseAddress = new Uri(gatewayBaseUrl.EndsWith("/") ? gatewayBaseUrl : gatewayBaseUrl + "/"));
 // -----------------------------------------------------------
 
 builder.Services.AddControllers();
-
-// The live results page keeps a WebSocket open to this service.
-builder.Services.AddSignalR();
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -52,8 +51,6 @@ builder.Services.AddCors(options =>
             .SetIsOriginAllowed(origin => true)
             .AllowAnyHeader()
             .AllowAnyMethod()
-            // SignalR sends credentials when it connects, so this is needed and it is why
-            // AllowAnyOrigin cannot be used here.
             .AllowCredentials();
     });
 });
@@ -78,8 +75,6 @@ app.UseCors("AllowVue");
 app.UseAuthorization();
 
 app.MapControllers();
-
-app.MapHub<PollHub>("/hubs/poll");
 
 app.MapGet("/", () => "VoteManage is running!");
 
