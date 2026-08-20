@@ -17,6 +17,9 @@ jobs:
     runs-on: ubuntu-latest
 
     strategy:
+      # Without this, one service failing cancels the other two mid-build, which hides
+      # what actually went wrong.
+      fail-fast: false
       matrix:
         include:
           - project: PollManage
@@ -56,7 +59,18 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Trigger Render Deploy
-        run: curl -X GET "${{ secrets[matrix.hook] }}"
+        env:
+          # Named here so the secret is passed as a value, never pasted into the shell command.
+          DEPLOY_HOOK: ${{ secrets[matrix.hook] }}
+        run: |
+          if [ -z "$DEPLOY_HOOK" ]; then
+            echo "No deploy hook set for ${{ matrix.project }} yet. Image was still pushed to Docker Hub."
+            exit 0
+          fi
+          # -f makes curl fail on a 4xx/5xx. Without it a wrong hook URL returns 404 and
+          # curl still exits 0, so the pipeline would report a deploy that never happened.
+          curl -fsS -X GET "$DEPLOY_HOOK"
+          echo "Render deploy triggered for ${{ matrix.project }}."
 
       - name: Report Production Deployment Status
         run: echo "${{ matrix.project }} image pushed to Docker Hub and Render deploy triggered."
