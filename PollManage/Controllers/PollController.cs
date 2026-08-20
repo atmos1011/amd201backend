@@ -57,7 +57,7 @@ namespace PollManage.Controllers
         {
             if (createPoll.Options.Any(o => string.IsNullOrWhiteSpace(o)))
             {
-                return BadRequest("Options cannot be empty.");
+                return BadRequest(new { error = "invalid_options", message = "Options cannot be empty." });
             }
 
             var poll = new Poll
@@ -106,13 +106,14 @@ namespace PollManage.Controllers
 
             if (!IsCreator(poll))
             {
-                return StatusCode(StatusCodes.Status403Forbidden, "Wrong or missing creator token.");
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    new { error = "not_creator", message = "Wrong or missing creator token." });
             }
 
             if (poll.HasVotes)
             {
                 // Changing the options now would move existing votes onto different text.
-                return Conflict("This poll already has votes, so it can no longer be edited.");
+                return Conflict(new { error = "poll_has_votes", message = "This poll already has votes, so it can no longer be edited." });
             }
 
             poll.Question = updatePoll.Question.Trim();
@@ -134,12 +135,13 @@ namespace PollManage.Controllers
 
             if (!IsCreator(poll))
             {
-                return StatusCode(StatusCodes.Status403Forbidden, "Wrong or missing creator token.");
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    new { error = "not_creator", message = "Wrong or missing creator token." });
             }
 
             if ((patchPoll.Question != null || patchPoll.Options != null) && poll.HasVotes)
             {
-                return Conflict("This poll already has votes, so it can no longer be edited.");
+                return Conflict(new { error = "poll_has_votes", message = "This poll already has votes, so it can no longer be edited." });
             }
 
             if (patchPoll.Question != null)
@@ -173,7 +175,8 @@ namespace PollManage.Controllers
 
             if (!IsCreator(poll))
             {
-                return StatusCode(StatusCodes.Status403Forbidden, "Wrong or missing creator token.");
+                return StatusCode(StatusCodes.Status403Forbidden,
+                    new { error = "not_creator", message = "Wrong or missing creator token." });
             }
 
             SetStatus(poll, "Closed");

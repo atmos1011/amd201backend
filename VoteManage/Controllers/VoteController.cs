@@ -42,12 +42,12 @@ namespace VoteManage.Controllers
 
             if (poll.Status != "Open")
             {
-                return Conflict("This poll is closed.");
+                return Conflict(new { error = "poll_closed", message = "This poll is closed." });
             }
 
             if (!poll.Options.Any(o => o.Index == createVote.OptionIndex))
             {
-                return BadRequest("That option does not exist on this poll.");
+                return BadRequest(new { error = "invalid_option", message = "That option does not exist on this poll." });
             }
 
             // A first time voter has no token yet, so we make one and send it back.
@@ -59,7 +59,7 @@ namespace VoteManage.Controllers
 
             if (await _repository.HasVotedAsync(code, voterToken))
             {
-                return Conflict("You have already voted in this poll.");
+                return Conflict(new { error = "already_voted", message = "You have already voted in this poll." });
             }
 
             var saved = await _repository.AddAsync(new Vote
@@ -73,7 +73,7 @@ namespace VoteManage.Controllers
             if (saved == null)
             {
                 // The unique index rejected it, so two votes were sent at the same time.
-                return Conflict("You have already voted in this poll.");
+                return Conflict(new { error = "already_voted", message = "You have already voted in this poll." });
             }
 
             _logger.LogInformation("vote saved for poll {Code}, option {OptionIndex}", code, createVote.OptionIndex);
