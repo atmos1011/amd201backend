@@ -126,6 +126,21 @@ curl http://localhost:5000/api/polls/<code>/results
 
 PollManage and VoteManage each have Swagger at `/swagger` for trying requests by hand.
 
+### Testing the API by hand
+
+Two options, both driving the gateway rather than the individual services, so they exercise the
+real path the Vue app takes:
+
+- **`PollBuilder.http`** at the solution root. Open it in Visual Studio and click "Send request"
+  above each block. Paste the poll code from request 1 into the variable at the top.
+- **`docs/PollBuilder.postman_collection.json`**. In Postman, *Import* the file. Request 1 saves the
+  poll code and creator token automatically, so the rest just work. *Run collection* fires all 17 in
+  order and checks the status codes.
+
+Both cover the same 17 cases, including the ones that prove the rules rather than the happy path:
+voting twice (409), editing after voting has started (409), closing without the creator token (403),
+and voting after the poll closes (409).
+
 ### Tests
 
 ```bash
