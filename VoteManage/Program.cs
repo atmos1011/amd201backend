@@ -8,8 +8,17 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Neon connection string. It lives in appsettings.json for local work, and on Render it is
 // overridden by the ConnectionStrings__myContext environment variable.
-var connectionString = builder.Configuration.GetConnectionString("myContext")
-    ?? throw new InvalidOperationException("Connection string 'myContext' not found.");
+var connectionString = builder.Configuration.GetConnectionString("myContext");
+
+// appsettings.json ships this key empty on purpose, so the real value can come from an
+// environment variable. Checking for null only is not enough: an empty string is not null,
+// and it would get all the way to Npgsql before failing with a much less obvious message.
+if (string.IsNullOrWhiteSpace(connectionString))
+{
+    throw new InvalidOperationException(
+        "Connection string 'myContext' is empty. Set the ConnectionStrings__myContext "
+        + "environment variable (two underscores) to your Neon connection string.");
+}
 
 builder.Services.AddDbContext<myContext>(options => options.UseNpgsql(connectionString));
 
