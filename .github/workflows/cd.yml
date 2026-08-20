@@ -64,11 +64,20 @@ jobs:
 
       - name: Trigger Render Deploy
         env:
-          # Named here so the secret is passed as a value, never pasted into the shell command.
-          DEPLOY_HOOK: ${{ secrets[matrix.hook] }}
+          # Every hook is listed explicitly and the right one is picked in the script below.
+          # Looking a secret up dynamically with secrets[matrix.hook] silently produced an
+          # empty string, so the deploy step skipped even though the secrets existed.
+          RENDER_DEPLOY_HOOK_POLL: ${{ secrets.RENDER_DEPLOY_HOOK_POLL }}
+          RENDER_DEPLOY_HOOK_VOTE: ${{ secrets.RENDER_DEPLOY_HOOK_VOTE }}
+          RENDER_DEPLOY_HOOK_RESULT: ${{ secrets.RENDER_DEPLOY_HOOK_RESULT }}
+          RENDER_DEPLOY_HOOK_GATEWAY: ${{ secrets.RENDER_DEPLOY_HOOK_GATEWAY }}
+          HOOK_NAME: ${{ matrix.hook }}
         run: |
+          # Indirect expansion: read the variable whose NAME is in $HOOK_NAME.
+          DEPLOY_HOOK="${!HOOK_NAME}"
+
           if [ -z "$DEPLOY_HOOK" ]; then
-            echo "No deploy hook set for ${{ matrix.project }} yet. Image was still pushed to Docker Hub."
+            echo "$HOOK_NAME is not set. Image was still pushed to Docker Hub."
             exit 0
           fi
           # -f makes curl fail on a 4xx/5xx. Without it a wrong hook URL returns 404 and
