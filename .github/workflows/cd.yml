@@ -72,5 +72,3 @@ jobs:
           curl -fsS -X GET "$DEPLOY_HOOK"
           echo "Render deploy triggered for ${{ matrix.project }}."
 
-      - name: Report Production Deployment Status
-        run: echo "${{ matrix.project }} image pushed to Docker Hub and Render deploy triggered."
