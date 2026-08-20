@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
 
-namespace VoteManage.Hubs
+namespace ResultManage.Hubs
 {
     // The results page opens a WebSocket to this hub. Everyone watching the same poll joins
     // the same group, so a new vote is only sent to the people looking at that poll.

@@ -1,6 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.SignalR;
-using VoteManage.Hubs;
 using VoteManage.Models;
 using VoteManage.Repo;
 using VoteManage.Services;
@@ -16,18 +14,18 @@ namespace VoteManage.Controllers
 
         private readonly IVoteRepo _repository;
         private readonly PollService _pollService;
-        private readonly IHubContext<PollHub> _hubContext;
+        private readonly ResultService _resultService;
         private readonly ILogger<VoteController> _logger;
 
         public VoteController(
             IVoteRepo r,
             PollService pollService,
-            IHubContext<PollHub> hubContext,
+            ResultService resultService,
             ILogger<VoteController> logger)
         {
             _repository = r;
             _pollService = pollService;
-            _hubContext = hubContext;
+            _resultService = resultService;
             _logger = logger;
         }
 
@@ -82,25 +80,29 @@ namespace VoteManage.Controllers
 
             await _pollService.NotifyVotesRecordedAsync(code);
 
-            var results = await BuildResultsAsync(poll);
-
-            // Push the new numbers to everyone watching this poll's results page.
-            await _hubContext.Clients.Group(PollHub.GroupFor(code)).SendAsync("ResultsUpdated", results);
+            // Ask ResultManage to rebuild the results and push them over SignalR. It hands
+            // the finished results back, so the voter gets them without another request.
+            var results = await _resultService.BroadcastAsync(code);
 
             Response.Headers[VoterTokenHeader] = voterToken;
             return Ok(new VoteResultDto { VoterToken = voterToken, Results = results });
         }
 
-        [HttpGet("{code}/results")]
-        public async Task<ActionResult<PollResultDto>> GetResults(string code)
+        // The raw counts this service owns. ResultManage calls this and adds the option
+        // text from PollManage to turn it into the results the chart shows.
+        [HttpGet("{code}/counts")]
+        public async Task<ActionResult<VoteCountsDto>> GetCounts(string code)
         {
-            var poll = await _pollService.GetPollByCodeAsync(code);
-            if (poll == null)
-            {
-                return NotFound();
-            }
+            var votes = await _repository.GetByPollCodeAsync(code);
 
-            return Ok(await BuildResultsAsync(poll));
+            return Ok(new VoteCountsDto
+            {
+                TotalVotes = votes.Count(),
+                Counts = votes
+                    .GroupBy(v => v.OptionIndex)
+                    .Select(g => new OptionCountDto { OptionIndex = g.Key, Votes = g.Count() })
+                    .ToList()
+            });
         }
 
         // Lets the page know whether this browser has already voted.
@@ -112,37 +114,6 @@ namespace VoteManage.Controllers
                 && await _repository.HasVotedAsync(code, voterToken);
 
             return Ok(new { hasVoted });
-        }
-
-        // Adds up the votes we own and puts the option text from PollManage next to them.
-        private async Task<PollResultDto> BuildResultsAsync(PollDetailsDto poll)
-        {
-            var votes = await _repository.GetByPollCodeAsync(poll.Code);
-            var total = votes.Count();
-
-            var results = new PollResultDto
-            {
-                Code = poll.Code,
-                Question = poll.Question,
-                Status = poll.Status,
-                TotalVotes = total
-            };
-
-            foreach (var option in poll.Options.OrderBy(o => o.Index))
-            {
-                var count = votes.Count(v => v.OptionIndex == option.Index);
-
-                results.Options.Add(new OptionResultDto
-                {
-                    Index = option.Index,
-                    Text = option.Text,
-                    Votes = count,
-                    // Every option is listed even with 0 votes, so the chart keeps its shape.
-                    Percentage = total == 0 ? 0 : Math.Round(count * 100.0 / total, 1)
-                });
-            }
-
-            return results;
         }
     }
 }

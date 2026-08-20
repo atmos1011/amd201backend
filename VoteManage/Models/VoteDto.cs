@@ -12,10 +12,23 @@ namespace VoteManage.Models
     public class VoteResultDto
     {
         public string VoterToken { get; set; } = string.Empty;
-        public PollResultDto Results { get; set; } = new PollResultDto();
+        public PollResultDto? Results { get; set; }
     }
 
-    // The live results, also the exact object sent over SignalR
+    // The counts this service owns, handed to ResultManage so it can add the option text
+    public class VoteCountsDto
+    {
+        public int TotalVotes { get; set; }
+        public List<OptionCountDto> Counts { get; set; } = new List<OptionCountDto>();
+    }
+
+    public class OptionCountDto
+    {
+        public int OptionIndex { get; set; }
+        public int Votes { get; set; }
+    }
+
+    // What ResultManage sends back after it has built the results
     public class PollResultDto
     {
         public string Code { get; set; } = string.Empty;

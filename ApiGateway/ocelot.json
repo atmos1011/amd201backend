@@ -44,30 +44,58 @@
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [ { "Host": "localhost", "Port": 5102 } ]
     },
+
+    // SignalR -> VoteManage. The handshake is a normal POST, then it upgrades to a WebSocket.
     {
-      "UpstreamPathTemplate": "/api/polls/{code}/results",
+      "UpstreamPathTemplate": "/api/polls/{code}/vote/counts",
       "UpstreamHttpMethod": [ "GET" ],
       "Priority": 10,
-      "DownstreamPathTemplate": "/api/vote/{code}/results",
+      "DownstreamPathTemplate": "/api/vote/{code}/counts",
       "DownstreamScheme": "http",
       "DownstreamHostAndPorts": [ { "Host": "localhost", "Port": 5102 } ]
     },
 
-    // SignalR -> VoteManage. The handshake is a normal POST, then it upgrades to a WebSocket.
+    // Result routes -> ResultManage (service C). It has no database: it asks PollManage
+    // for the option text and VoteManage for the counts, then joins them.
+    {
+      "UpstreamPathTemplate": "/api/polls/{code}/results",
+      "UpstreamHttpMethod": [ "GET" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/result/{code}",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "localhost", "Port": 5103 } ]
+    },
+    {
+      "UpstreamPathTemplate": "/api/polls/{code}/results.csv",
+      "UpstreamHttpMethod": [ "GET" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/result/{code}/csv",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "localhost", "Port": 5103 } ]
+    },
+    {
+      // VoteManage calls this after saving a vote
+      "UpstreamPathTemplate": "/api/polls/{code}/results/broadcast",
+      "UpstreamHttpMethod": [ "POST" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/result/{code}/broadcast",
+      "DownstreamScheme": "http",
+      "DownstreamHostAndPorts": [ { "Host": "localhost", "Port": 5103 } ]
+    },
     {
       "UpstreamPathTemplate": "/hubs/poll/negotiate",
       "UpstreamHttpMethod": [ "POST", "OPTIONS" ],
       "Priority": 10,
       "DownstreamPathTemplate": "/hubs/poll/negotiate",
       "DownstreamScheme": "http",
-      "DownstreamHostAndPorts": [ { "Host": "localhost", "Port": 5102 } ]
+      "DownstreamHostAndPorts": [ { "Host": "localhost", "Port": 5103 } ]
     },
     {
       "UpstreamPathTemplate": "/hubs/poll",
       "Priority": 10,
       "DownstreamPathTemplate": "/hubs/poll",
       "DownstreamScheme": "ws",
-      "DownstreamHostAndPorts": [ { "Host": "localhost", "Port": 5102 } ]
+      "DownstreamHostAndPorts": [ { "Host": "localhost", "Port": 5103 } ]
     },
 
     // This one is last on purpose. Its {code} at the end will match anything, including

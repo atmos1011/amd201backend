@@ -47,12 +47,40 @@
       "DownstreamHostAndPorts": [ { "Host": "pollbuilder-votemanage.onrender.com", "Port": 443 } ]
     },
     {
+      "UpstreamPathTemplate": "/api/polls/{code}/vote/counts",
+      "UpstreamHttpMethod": [ "GET" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/vote/{code}/counts",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [ { "Host": "pollbuilder-votemanage.onrender.com", "Port": 443 } ]
+    },
+
+    // Result routes -> ResultManage (service C). It has no database: it asks PollManage
+    // for the option text and VoteManage for the counts, then joins them.
+    {
       "UpstreamPathTemplate": "/api/polls/{code}/results",
       "UpstreamHttpMethod": [ "GET" ],
       "Priority": 10,
-      "DownstreamPathTemplate": "/api/vote/{code}/results",
+      "DownstreamPathTemplate": "/api/result/{code}",
       "DownstreamScheme": "https",
-      "DownstreamHostAndPorts": [ { "Host": "pollbuilder-votemanage.onrender.com", "Port": 443 } ]
+      "DownstreamHostAndPorts": [ { "Host": "pollbuilder-resultmanage.onrender.com", "Port": 443 } ]
+    },
+    {
+      "UpstreamPathTemplate": "/api/polls/{code}/results.csv",
+      "UpstreamHttpMethod": [ "GET" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/result/{code}/csv",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [ { "Host": "pollbuilder-resultmanage.onrender.com", "Port": 443 } ]
+    },
+    {
+      // VoteManage calls this after saving a vote
+      "UpstreamPathTemplate": "/api/polls/{code}/results/broadcast",
+      "UpstreamHttpMethod": [ "POST" ],
+      "Priority": 10,
+      "DownstreamPathTemplate": "/api/result/{code}/broadcast",
+      "DownstreamScheme": "https",
+      "DownstreamHostAndPorts": [ { "Host": "pollbuilder-resultmanage.onrender.com", "Port": 443 } ]
     },
     {
       "UpstreamPathTemplate": "/hubs/poll/negotiate",
@@ -60,14 +88,14 @@
       "Priority": 10,
       "DownstreamPathTemplate": "/hubs/poll/negotiate",
       "DownstreamScheme": "https",
-      "DownstreamHostAndPorts": [ { "Host": "pollbuilder-votemanage.onrender.com", "Port": 443 } ]
+      "DownstreamHostAndPorts": [ { "Host": "pollbuilder-resultmanage.onrender.com", "Port": 443 } ]
     },
     {
       "UpstreamPathTemplate": "/hubs/poll",
       "Priority": 10,
       "DownstreamPathTemplate": "/hubs/poll",
       "DownstreamScheme": "wss",
-      "DownstreamHostAndPorts": [ { "Host": "pollbuilder-votemanage.onrender.com", "Port": 443 } ]
+      "DownstreamHostAndPorts": [ { "Host": "pollbuilder-resultmanage.onrender.com", "Port": 443 } ]
     },
     {
       "UpstreamPathTemplate": "/api/polls/{code}",
