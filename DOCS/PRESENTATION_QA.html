@@ -194,6 +194,17 @@
   .more p:first-child { margin-top: 0; }
   .more p:last-child { margin-bottom: 0; }
 
+  /* ---------- show them ---------- */
+  .show {
+    border-left: 3px solid var(--ochre);
+    padding: 2px 0 2px 16px;
+    margin: 14px 0 0;
+  }
+  .show .label { color: var(--ochre); }
+  .show p { margin: 0 0 8px; font-size: 0.94rem; color: var(--ink-soft); }
+  .show pre { margin: 8px 0; }
+  .show > :last-child { margin-bottom: 0; }
+
   /* ---------- callout ---------- */
   .careful {
     background: var(--ochre-dim);
@@ -361,6 +372,19 @@
       <p>It's useful because it removes the two things that usually break student projects: forgetting to run the tests, and deploying a different version than the one you tested. The pipeline does both the same way every time.</p>
       <p>Our CI also runs <code>dotnet format --verify-no-changes</code>, so badly formatted code fails the build before anyone reviews it.</p>
     </div>
+      <div class="show">
+        <span class="label">Show them</span>
+        <p>Make a one-word change, then push. Have the Actions tab open on the projector.</p>
+<pre><code>git add . &amp;&amp; git commit -m "demo: change a label"
+git push origin main</code></pre>
+        <p>Then in the terminal, or just watch the browser:</p>
+<pre><code>gh run list --limit 3
+gh run watch</code></pre>
+        <p>Four jobs run in parallel, one per service. Open one and show the deploy step — it prints
+        the id Render gave back, which proves the deploy really happened:</p>
+<pre><code>{"deploy":{"id":"dep-da3lp6jm8hqs73cbgj7g"}}
+Render deploy triggered for PollManage.</code></pre>
+      </div>
   </div>
 
   <div class="qa">
@@ -375,6 +399,19 @@
       <p>The hub is in ResultManage at <code>/hubs/poll</code>. When a results page opens, the browser calls <code>JoinPoll(code)</code>, which puts that connection into a <em>group</em> named after the poll. A vote then only fans out to people watching <em>that</em> poll, not everyone connected.</p>
       <p>SignalR falls back to Server-Sent Events or long polling if WebSockets are blocked, which is why it works through the gateway and through Render's proxy.</p>
     </div>
+      <div class="show">
+        <span class="label">Show them</span>
+        <p>Two browser windows side by side on the same results page. Vote in one, the chart moves in
+        the other. Do not refresh — that is the whole point.</p>
+        <p>If they want proof it is a socket and not polling: <strong>F12 → Network → WS</strong>,
+        click the connection, open <strong>Messages</strong>. You will see one frame arrive per vote.
+        A polling app would show a request every second instead.</p>
+        <p>The code is nine lines — <code>ResultManage/Hubs/PollHub.cs</code>:</p>
+<pre><code>public async Task JoinPoll(string code)
+{
+    await Groups.AddToGroupAsync(Context.ConnectionId, GroupFor(code));
+}</code></pre>
+      </div>
   </div>
 
   <div class="qa">
@@ -388,6 +425,17 @@
       <p>Ours is Ocelot, configured in <code>ocelot.json</code> with 12 routes. It also means one CORS origin to trust and one URL to change, rather than three.</p>
       <p>Concretely, <code>/api/polls/{code}</code> goes to PollManage but <code>/api/polls/{code}/vote</code> goes to VoteManage — same URL prefix, different services, and the browser can't tell.</p>
     </div>
+      <div class="show">
+        <span class="label">Show them</span>
+        <p>Open <code>ApiGateway/ocelot.json</code> and read one route out loud:</p>
+<pre><code>"UpstreamPathTemplate":   "/api/polls/{code}/vote",   &lt;- what the browser calls
+"DownstreamPathTemplate": "/api/vote/{code}",         &lt;- what VoteManage serves
+"DownstreamHostAndPorts": [ { "Host": "localhost", "Port": 5102 } ]</code></pre>
+        <p>Then show the same request through the gateway and straight at the service, in Postman or
+        Swagger. Same answer, two different addresses — and the browser only ever knows the first.</p>
+<pre><code>http://localhost:5000/api/polls/{code}/vote     via the gateway
+http://localhost:5102/api/vote/{code}           the service itself</code></pre>
+      </div>
   </div>
 
   <div class="qa">
@@ -401,6 +449,14 @@
       <p>The real benefit here is that each service can be deployed and restarted on its own. ResultManage has no database at all, so restarting it can't lose data.</p>
       <p>Be honest about the cost too: it is more moving parts, more network calls, and a vote now touches three services instead of one. For a project this size a single API would be simpler — we split it because the architecture is what the assignment is teaching.</p>
     </div>
+      <div class="show">
+        <span class="label">Show them</span>
+        <p>The Render dashboard is the clearest evidence: four separate services, each with its own
+        log stream and its own deploy history.</p>
+        <p>Locally it is four console windows. Point at the ResultManage one while you load a results
+        page — you will see it fetching from the gateway twice, once for the poll and once for the
+        counts. That is service C calling A and B, live.</p>
+      </div>
   </div>
 
   <div class="qa">
@@ -413,6 +469,15 @@
       <span class="label">If they push further</span>
       <p>Each service has a multi-stage Dockerfile: the first stage uses the .NET SDK image to build and publish, the second copies only the published output into the smaller ASP.NET runtime image. The final image carries no SDK, no source code, and no NuGet cache.</p>
     </div>
+      <div class="show">
+        <span class="label">Show them</span>
+        <p><code>PollManage/Dockerfile</code>, and point at the two <code>FROM</code> lines:</p>
+<pre><code>FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build    &lt;- compiles
+FROM mcr.microsoft.com/dotnet/aspnet:10.0          &lt;- runs, no SDK inside</code></pre>
+        <p>If Docker Desktop is running, the size difference makes the point on its own:</p>
+<pre><code>docker build -f PollManage/Dockerfile -t pollmanage PollManage/
+docker images | findstr pollmanage</code></pre>
+      </div>
   </div>
 
   <div class="qa">
@@ -426,6 +491,20 @@
       <p>Ours are <code>addpoll</code> and <code>addvote</code>. Both services call <code>Database.Migrate()</code> on startup, because Render's Docker deploy has no separate step where you'd run <code>update-database</code> by hand.</p>
       <p>That means the tables appear by themselves the first time a service runs against an empty database — which is exactly what happened on Neon.</p>
     </div>
+      <div class="show">
+        <span class="label">Show them</span>
+<pre><code>dotnet ef migrations list --project PollManage</code></pre>
+        <p>Then open <code>VoteManage/Migrations/…_addvote.cs</code> and show that the C# model turned
+        into a real schema:</p>
+<pre><code>migrationBuilder.CreateIndex(
+    name: "IX_Votes_PollCode_VoterToken",
+    table: "Votes",
+    columns: new[] { "PollCode", "VoterToken" },
+    unique: true);</code></pre>
+        <p>If they ask where the tables came from on Neon, show the line in <code>Program.cs</code>:
+        <code>Database.Migrate()</code> runs at startup, because Render has no step where you would
+        run <code>update-database</code> yourself.</p>
+      </div>
   </div>
 
   <div class="qa">
@@ -438,6 +517,14 @@
       <span class="label">If they push further</span>
       <p><code>IPollRepo</code> / <code>PollRepo</code> and <code>IVoteRepo</code> / <code>VoteRepo</code>, registered with <code>AddScoped</code> in <code>Program.cs</code>. That registration is dependency injection: the controller asks for the interface and ASP.NET supplies the implementation.</p>
     </div>
+      <div class="show">
+        <span class="label">Show them</span>
+        <p>Two files, ten seconds. <code>VoteManage/Repo/IVoteRepo.cs</code> is the contract, and the
+        registration in <code>Program.cs</code> is the dependency injection:</p>
+<pre><code>builder.Services.AddScoped&lt;IVoteRepo, VoteRepo&gt;();</code></pre>
+        <p>Then <code>PollBuilder.Tests/VoteRepoTests.cs</code> — the tests use an in-memory database
+        through that same interface, which is why they run in half a second with no database at all.</p>
+      </div>
   </div>
 
   <div class="qa">
@@ -447,6 +534,16 @@
       <p>REST means the URL names a resource and the HTTP verb says what you're doing to it. <code>POST /api/polls</code> creates one, <code>GET /api/polls/{code}</code> reads it.</p>
       <p>PUT replaces the whole poll — you must send every field. PATCH changes only the fields you send, which is how the poll is closed: <code>{ "status": "Closed" }</code>.</p>
     </div>
+      <div class="show">
+        <span class="label">Show them</span>
+        <p>In Postman, requests 13 and 15 of the collection. Closing a poll is just a PATCH that
+        changes one field:</p>
+<pre><code>PATCH /api/polls/{code}
+X-Creator-Token: &lt;token&gt;
+
+{ "status": "Closed" }</code></pre>
+        <p>Request 17 is the PUT, and it needs every field. That is the difference, in two requests.</p>
+      </div>
   </div>
 </section>
 
@@ -524,6 +621,15 @@
         <li><strong>Tell ResultManage to broadcast.</strong> It rebuilds the results, pushes <code>ResultsUpdated</code> to the poll's group, and hands the results back so the voter gets them in the same response.</li>
       </ol>
     </div>
+      <div class="show">
+        <span class="label">Show them</span>
+        <p>Run the Postman collection and let the runner walk down the list — 17 requests, 23
+        assertions, all green. It reads as a story: create, vote, vote again and get blocked, results,
+        close, vote and get blocked again.</p>
+        <p>For the cross-service part, put the four console windows where they can be seen and send
+        one vote. VoteManage logs the save, PollManage logs the lock, ResultManage logs the push.
+        Three services, one click.</p>
+      </div>
   </div>
 
   <div class="qa">
@@ -538,6 +644,26 @@
       <p>We tested it: five simultaneous votes from the same token gave one <span class="st ok">200</span> and four <span class="st warn">409</span>s, with exactly one row stored.</p>
       <p>Honest limit: it identifies a <em>browser</em>, not a person. Clearing localStorage or opening a private window lets you vote again. The brief allows that — it asks for no login.</p>
     </div>
+      <div class="show">
+        <span class="label">Show them</span>
+        <p>Simplest version: Postman request 3 then request 4. <span class="st ok">200</span> then
+        <span class="st warn">409</span>.</p>
+        <p>The stronger version, if you want to prove the database is what stops it — five votes at
+        once from the same token, in Git Bash:</p>
+<pre><code>for i in 1 2 3 4 5; do
+  curl -s -o /dev/null -w "%{http_code}\n" \
+    -X POST http://localhost:5000/api/polls/CODE/vote \
+    -H "Content-Type: application/json" \
+    -H "X-Voter-Token: racer" \
+    -d '{"optionIndex":0}' &amp;
+done; wait</code></pre>
+        <p>One <span class="st ok">200</span>, four <span class="st warn">409</span>s, and the results
+        show exactly one vote. Then show the index that did it, in
+        <code>VoteManage/Data/myContext.cs</code>:</p>
+<pre><code>modelBuilder.Entity&lt;Vote&gt;()
+    .HasIndex(v =&gt; new { v.PollCode, v.VoterToken })
+    .IsUnique();</code></pre>
+      </div>
   </div>
 
   <div class="qa">
@@ -550,6 +676,15 @@
       <span class="label">If they push further</span>
       <p>It never appears in any <code>GET</code> response, so a voter opening the poll can't see it. The frontend saves it in localStorage under the poll's code, which is why the Close button only appears in the browser that made the poll.</p>
     </div>
+      <div class="show">
+        <span class="label">Show them</span>
+        <p>Postman request 12 then 13 — the same close call, without the header and with it:</p>
+<pre><code>POST /api/polls/{code}/close                    -&gt; 403
+POST /api/polls/{code}/close
+X-Creator-Token: &lt;token&gt;                        -&gt; 200</code></pre>
+        <p>In the app it is even clearer: the Close button only appears in the browser that created
+        the poll. Open the same results page in a second browser and the button is not there.</p>
+      </div>
   </div>
 
   <div class="qa">
@@ -578,6 +713,16 @@
 status  "Open" / "Closed"  →  "open" / "closed"
 options[].votes            →  counts: [3, 1]</code></pre>
     </div>
+      <div class="show">
+        <span class="label">Show them</span>
+        <p><code>src/services/pollService.js</code>. The three mapping functions at the top are the
+        whole translation layer:</p>
+<pre><code>function toStatus(s)        { return String(s).toLowerCase(); }        // "Open" -&gt; "open"
+function toOptionLabels(o)  { return o.map(x =&gt; x.text); }             // [{index,text}] -&gt; ["Tabs"]
+function toCounts(o)        { return o.map(x =&gt; x.votes ?? 0); }       // -&gt; [3, 1]</code></pre>
+        <p>Then F12 → Network on the deployed site, click a poll, and show the request going to the
+        gateway URL — not to any individual service.</p>
+      </div>
   </div>
 
   <div class="qa">
@@ -591,6 +736,13 @@ options[].votes            →  counts: [3, 1]</code></pre>
       <p>The first fetch matters — pushes only happen when someone votes, so a page opened mid-poll would otherwise show nothing.</p>
       <p><code>withAutomaticReconnect</code> is set, and <code>onreconnected</code> calls <code>JoinPoll</code> again, because group membership is lost when the connection drops — which happens on Render's free tier when a service sleeps.</p>
     </div>
+      <div class="show">
+        <span class="label">Show them</span>
+        <p>F12 → Network → WS on the results page. One WebSocket, opened once, staying open. Vote in
+        another window and a message appears in the frame list at that moment.</p>
+        <p>Then <code>src/views/ResultsPage.vue</code> — the fetch happens once on mount, and after
+        that every update arrives through <code>onResults</code>.</p>
+      </div>
   </div>
 
   <div class="qa">
@@ -619,6 +771,18 @@ options[].votes            →  counts: [3, 1]</code></pre>
    (format, build, test)  (docker + deploy)</code></pre>
       <p>The four CD jobs run as a matrix — one per project — with <code>fail-fast: false</code>, so one service failing doesn't cancel the others.</p>
     </div>
+      <div class="show">
+        <span class="label">Show them</span>
+        <p>The two files, then a live run.</p>
+<pre><code>.github/workflows/ci.yml    format -&gt; build -&gt; test
+.github/workflows/cd.yml    docker build -&gt; Docker Hub -&gt; Render</code></pre>
+        <p>You do not need a code change to trigger it — the workflow has
+        <code>workflow_dispatch</code>:</p>
+<pre><code>gh workflow run cd.yml --ref main
+gh run watch</code></pre>
+        <p>Or in the browser: <strong>Actions → Backend CD Pipeline → Run workflow</strong>. Then
+        switch to Render and show the deploy that just started.</p>
+      </div>
   </div>
 
   <div class="qa">
@@ -627,6 +791,13 @@ options[].votes            →  counts: [3, 1]</code></pre>
       <span class="label">Say this</span>
       <p><code>dotnet format --verify-no-changes</code> in CI. It fails the build if any file isn't formatted the way the compiler and <code>.editorconfig</code> expect.</p>
     </div>
+      <div class="show">
+        <span class="label">Show them</span>
+<pre><code>dotnet format --verify-no-changes</code></pre>
+        <p>Silence and exit code 0 means clean. To prove it actually fails: break the indentation in
+        any <code>.cs</code> file, run it again, and it lists the file and the line. That is the same
+        command CI runs, so a badly formatted push cannot merge.</p>
+      </div>
   </div>
 
   <div class="qa">
@@ -690,6 +861,14 @@ options[].votes            →  counts: [3, 1]</code></pre>
       <p>That's fair. The 13 unit tests cover the repositories — saving, finding, one vote per browser. The rules in the controllers are covered by a Postman collection with 23 assertions that we run against both local and production, but that isn't run by CI, so it isn't automated.</p>
     </div>
     <div class="careful"><p><strong>Don't oversell this one.</strong> If you claim integration tests exist in the repo, they'll look. Say what's there.</p></div>
+      <div class="show">
+        <span class="label">Show them</span>
+        <p>Do not hide it — show both, and be clear which is which.</p>
+<pre><code>dotnet test                 13 unit tests, run by CI on every push</code></pre>
+        <p>Then the Postman runner: 23 assertions covering the rules, run by hand against local and
+        production. Say plainly that the second set is not automated, and that wiring it into CI is
+        the obvious next step.</p>
+      </div>
   </div>
 
   <div class="qa">
