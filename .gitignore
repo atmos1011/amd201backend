@@ -18,3 +18,4 @@ TestResults/
 
 ## Local dev settings hold the real Neon password
 appsettings.Development.json
+PollBuilder.slnLaunch.user
