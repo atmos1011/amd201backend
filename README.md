@@ -12,6 +12,7 @@ PostgreSQL on Neon, deployed to Render. The Vue frontend lives in a separate rep
 | [`DOCS/PollBuilder.postman_collection.json`](DOCS/PollBuilder.postman_collection.json) | 17 requests, 23 assertions — import into Postman |
 | [`DOCS/PollBuilder.http`](DOCS/PollBuilder.http) | The same requests, clickable in Visual Studio |
 | [`DOCS/PRESENTATION_QA.html`](DOCS/PRESENTATION_QA.html) | Presentation question prep |
+| [`DOCS/REPORT_NOTES.md`](DOCS/REPORT_NOTES.md) | Material for the individual report |
 
 ## Quick start
 
