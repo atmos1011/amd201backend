@@ -11,6 +11,7 @@ The Vue SPA is deployed separately on Vercel and only ever calls the gateway.
 - **Live gateway:** https://pollbuilder-gateway-rj0d.onrender.com
 - **Live frontend:** https://vuetest-ashy-nu.vercel.app
 - **Frontend repository:** https://github.com/atmos1011/vuetest
+- **API contract:** [`DOCS/API_CONTRACT.md`](DOCS/API_CONTRACT.md) — every endpoint, both token headers, and the SignalR contract
 
 ---
 
